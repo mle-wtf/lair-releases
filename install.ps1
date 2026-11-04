@@ -20,6 +20,15 @@
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
     $done = 'Run `lair` to sign in or create an account.'
+    # `iex` runs in the window it was pasted into, so lair goes on this window's
+    # PATH as well: the installer's change to the user PATH only reaches windows
+    # opened afterwards, and `lair` straight after installing must just work.
+    $ready = {
+        $dir = Join-Path $env:LOCALAPPDATA 'Programs\LAIR Minion'
+        if (($env:Path -split ';') -notcontains $dir) { $env:Path = "$env:Path;$dir" }
+        Write-Host 'Installed. `lair` is ready in this window.'
+        Write-Host $done
+    }
     $base = $env:LAIR_RELEASE_BASE
     if (-not $base) {
         $base = 'https://github.com/mle-wtf/lair-releases/releases/latest/download'
@@ -35,8 +44,7 @@
                 Write-Host 'Installing LAIR with winget ...'
                 & winget install --id MLE.LAIR --exact --scope user --source winget --silent --accept-source-agreements --accept-package-agreements
                 if ($LASTEXITCODE -ne 0) { throw "lair install: winget install failed (exit $LASTEXITCODE)." }
-                Write-Host 'Open a new terminal so PATH picks up lair.'
-                Write-Host $done
+                & $ready
                 return
             }
         }
@@ -70,6 +78,5 @@
     finally {
         Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }
-    Write-Host 'Installed. Open a new terminal so PATH picks up lair.'
-    Write-Host $done
+    & $ready
 }
