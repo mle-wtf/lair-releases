@@ -11,7 +11,9 @@
 # running from the install folder, which hold its files: a silent install
 # cannot replace them and aborts with exit 5 (d13506dd). Afterwards it starts
 # the tray, since a silent install skips the installer's own launch: when
-# LAIR was running before, or on a desktop session (not over ssh).
+# LAIR was running before, or on a desktop session. Over ssh only what was
+# running comes back, on this user's desktop session through `lair tray
+# start` (01f9f839).
 #
 # $env:LAIR_RELEASE_BASE points it at another release directory (a staging
 # release, or a local server for testing); winget is skipped when it is set,
@@ -28,6 +30,7 @@
     $done = 'Run `lair` to sign in or create an account.'
     $dir = Join-Path $env:LOCALAPPDATA 'Programs\LAIR Minion'
     $tray = Join-Path $dir 'lair-minion-tray.exe'
+    $lair = Join-Path $dir 'lair.exe'
     # This user's LAIR processes running from $dir: the minion, the tray, and
     # any TUI or MCP child. Another user's, or a build run from elsewhere,
     # holds none of these files and is left alone.
@@ -58,13 +61,26 @@
         return $true
     }
     # Over ssh there is no desktop for the tray to stand on: one started here
-    # would have no taskbar and would die with the ssh session.
+    # would have no taskbar and would die with the ssh session. lair.exe
+    # starts it on this user's desktop session instead, the way a bare `lair`
+    # does, and fails when they have none.
     $ssh = [bool]($env:SSH_CONNECTION -or $env:SSH_CLIENT)
     $desktop = [Environment]::UserInteractive -and -not $ssh
     $relaunch = {
         param([bool]$WasRunning)
         if ($ssh) {
-            if ($WasRunning) { Write-Host 'LAIR was stopped for the upgrade. Start it again from the Start menu on the desktop.' }
+            if (-not $WasRunning) { return }
+            if (Test-Path -LiteralPath $lair) {
+                Write-Host 'Starting the LAIR tray on the desktop ...'
+                $started = & {
+                    $ErrorActionPreference = 'Continue'
+                    # Its output goes, so only the test below is the answer.
+                    & $lair tray start | Out-Null
+                    $LASTEXITCODE -eq 0
+                }
+                if ($started) { return }
+            }
+            Write-Host 'LAIR was stopped for the upgrade. Start it again from the Start menu on the desktop.'
             return
         }
         if (($WasRunning -or $desktop) -and (Test-Path -LiteralPath $tray)) {
